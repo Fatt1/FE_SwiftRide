@@ -1066,7 +1066,10 @@ export const DriverPage: React.FC = () => {
 
                     {/* Card Option */}
                     <div 
-                      onClick={() => setDropoffPaymentMethod(1)}
+                      onClick={() => {
+                        setDropoffPaymentMethod(1);
+                        if (!dropoffGatewayToken) setDropoffGatewayToken('mock-success');
+                      }}
                       style={{
                         padding: '0.85rem',
                         borderRadius: '10px',
@@ -1104,34 +1107,48 @@ export const DriverPage: React.FC = () => {
                       className="form-input"
                       value={dropoffGatewayToken}
                       onChange={(e) => setDropoffGatewayToken(e.target.value)}
-                      placeholder="Nhập mã token thẻ (vd: mock-success, tok_visa_4242)"
+                      placeholder="Nhập mã token thẻ (vd: mock-success, mock-fail, mock-decline)"
                       maxLength={128}
                       required
                       style={{ width: '100%' }}
                     />
 
-                    {/* Sample token quick chips */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mẫu token:</span>
-                      {['mock-success', 'tok_visa_4242', 'tok_mastercard_0001'].map((token) => (
-                        <button
-                          key={token}
-                          type="button"
-                          onClick={() => setDropoffGatewayToken(token)}
-                          style={{
-                            fontSize: '0.72rem',
-                            fontFamily: 'var(--font-mono)',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-light)',
-                            backgroundColor: 'var(--bg-subtle)',
-                            color: 'var(--text-main)',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {token}
-                        </button>
-                      ))}
+                    {/* Sample token quick chips according to MockCardPaymentProcessor */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.6rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mẫu token hỗ trợ bởi Backend:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                        {[
+                          { token: 'mock-success', desc: 'Thành công', color: '#059669', bg: '#ecfdf5' },
+                          { token: 'mock-fail', desc: 'Test Retry', color: '#d97706', bg: '#fffbeb' },
+                          { token: 'mock-decline', desc: 'Từ chối thẻ', color: '#e11d48', bg: '#fff1f2' },
+                        ].map((item) => {
+                          const isCurrent = dropoffGatewayToken === item.token;
+                          return (
+                            <button
+                              key={item.token}
+                              type="button"
+                              onClick={() => setDropoffGatewayToken(item.token)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                fontSize: '0.75rem',
+                                padding: '0.25rem 0.55rem',
+                                borderRadius: '7px',
+                                border: isCurrent ? `1.5px solid ${item.color}` : '1px solid var(--border-light)',
+                                backgroundColor: isCurrent ? item.bg : 'var(--bg-subtle)',
+                                color: isCurrent ? item.color : 'var(--text-main)',
+                                cursor: 'pointer',
+                                fontWeight: isCurrent ? 700 : 500,
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>{item.token}</code>
+                              <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>({item.desc})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 ) : (
