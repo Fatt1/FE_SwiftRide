@@ -928,12 +928,53 @@ export const DriverPage: React.FC = () => {
       {/* ======================================================== */}
       {dropoffModalTrip && (
         <div className="modal-overlay" onClick={closeDropoffModal}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+          <div 
+            className="modal-dialog" 
+            style={{ 
+              maxWidth: '520px', 
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid var(--border-light)',
+              boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.25)',
+              overflow: 'hidden'
+            }} 
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className="modal-header">
-              <div className="modal-title">
-                <CheckCircle2 size={20} className="text-emerald-600" />
-                <span>Xác nhận Trả khách & Thanh toán</span>
+            <div 
+              className="modal-header" 
+              style={{ 
+                padding: '1.15rem 1.4rem', 
+                borderBottom: '1px solid var(--border-light)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#ffffff'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div 
+                  style={{ 
+                    width: '36px', 
+                    height: '36px', 
+                    borderRadius: '10px', 
+                    backgroundColor: 'var(--primary-subtle)', 
+                    color: 'var(--primary)',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center' 
+                  }}
+                >
+                  <CheckCircle2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    Xác nhận Trả khách & Thanh toán
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Mã chuyến: <code style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>#{dropoffModalTrip.id.slice(0, 8)}</code>
+                  </span>
+                </div>
               </div>
               <button 
                 type="button" 
@@ -947,20 +988,25 @@ export const DriverPage: React.FC = () => {
 
             {/* Modal Form */}
             <form onSubmit={handleConfirmDropoff}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div className="modal-body" style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
                 {/* Trip Summary Card */}
-                <div style={{ padding: '0.85rem 1rem', borderRadius: '10px', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-light)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Mã chuyến đi:</span>
-                    <strong style={{ fontFamily: 'var(--font-mono)' }}>#{dropoffModalTrip.id.slice(0, 8)}</strong>
+                <div 
+                  style={{ 
+                    padding: '0.9rem 1.1rem', 
+                    borderRadius: '12px', 
+                    backgroundColor: 'var(--bg-subtle)', 
+                    border: '1px solid var(--border-light)' 
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Điểm trả khách:</span>
+                    <strong style={{ maxWidth: '280px', textAlign: 'right', color: 'var(--text-main)' }}>
+                      {dropoffModalTrip.dropoffAddress}
+                    </strong>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Điểm trả:</span>
-                    <span style={{ fontWeight: 600, maxWidth: '280px', textAlign: 'right' }}>{dropoffModalTrip.dropoffAddress}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--border-subtle)' }}>
-                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>Cước phí thanh toán:</span>
-                    <strong style={{ fontSize: '1.15rem', color: 'var(--primary)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.55rem', borderTop: '1px dashed var(--border-light)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cước phí thanh toán:</span>
+                    <strong style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)' }}>
                       {formatVND(dropoffModalTrip.estimatedFare)}
                     </strong>
                   </div>
@@ -970,9 +1016,10 @@ export const DriverPage: React.FC = () => {
                 {dropoffError && (
                   <div 
                     style={{ 
-                      padding: '0.75rem', 
+                      padding: '0.75rem 1rem', 
                       borderRadius: '8px', 
                       backgroundColor: 'var(--accent-rose-subtle)', 
+                      border: '1px solid var(--accent-rose-border, #fecdd3)',
                       color: 'var(--accent-rose)', 
                       fontSize: '0.85rem',
                       display: 'flex', 
@@ -980,17 +1027,17 @@ export const DriverPage: React.FC = () => {
                       gap: '0.5rem' 
                     }}
                   >
-                    <AlertCircle size={16} />
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
                     <span>{dropoffError}</span>
                   </div>
                 )}
 
                 {/* Field 1: Phương thức thanh toán (Payment Method) */}
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>
+                <div>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: '0.45rem' }}>
                     Phương thức thanh toán <span style={{ color: 'var(--accent-rose)' }}>*</span>
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.35rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     {/* Wallet Option */}
                     <div 
                       onClick={() => setDropoffPaymentMethod(0)}
@@ -1046,52 +1093,71 @@ export const DriverPage: React.FC = () => {
                 </div>
 
                 {/* Field 2: Gateway Token Input */}
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
-                    <span>
-                      Mã Token Cổng Thanh Toán {dropoffPaymentMethod === 1 ? '(Bắt buộc)' : '(Tùy chọn)'}
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>Tối đa 128 ký tự</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={dropoffGatewayToken}
-                    onChange={(e) => setDropoffGatewayToken(e.target.value)}
-                    placeholder={dropoffPaymentMethod === 1 ? 'Nhập token cổng thanh toán (vd: tok_visa_4242)' : 'Tùy chọn (để trống nếu dùng ví chuẩn)'}
-                    maxLength={128}
-                    required={dropoffPaymentMethod === 1}
-                  />
+                {dropoffPaymentMethod === 1 ? (
+                  <div>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <span>Mã Token Thẻ / Cổng Thanh Toán <span style={{ color: 'var(--accent-rose)' }}>*</span></span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>Tối đa 128 ký tự</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={dropoffGatewayToken}
+                      onChange={(e) => setDropoffGatewayToken(e.target.value)}
+                      placeholder="Nhập mã token thẻ (vd: mock-success, tok_visa_4242)"
+                      maxLength={128}
+                      required
+                      style={{ width: '100%' }}
+                    />
 
-                  {/* Sample token quick chips */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mẫu token:</span>
-                    {['tok_visa_4242', 'tok_mastercard_0001', 'VNPAY_SANDBOX_TXN'].map((token) => (
-                      <button
-                        key={token}
-                        type="button"
-                        onClick={() => setDropoffGatewayToken(token)}
-                        style={{
-                          fontSize: '0.72rem',
-                          fontFamily: 'var(--font-mono)',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--border-light)',
-                          backgroundColor: 'var(--bg-subtle)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {token}
-                      </button>
-                    ))}
+                    {/* Sample token quick chips */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mẫu token:</span>
+                      {['mock-success', 'tok_visa_4242', 'tok_mastercard_0001'].map((token) => (
+                        <button
+                          key={token}
+                          type="button"
+                          onClick={() => setDropoffGatewayToken(token)}
+                          style={{
+                            fontSize: '0.72rem',
+                            fontFamily: 'var(--font-mono)',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-light)',
+                            backgroundColor: 'var(--bg-subtle)',
+                            color: 'var(--text-main)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {token}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div 
+                    style={{ 
+                      padding: '0.75rem 0.9rem', 
+                      borderRadius: '8px', 
+                      backgroundColor: 'var(--bg-subtle)', 
+                      border: '1px solid var(--border-light)',
+                      fontSize: '0.8rem',
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <ShieldCheck size={16} className="text-emerald-600" style={{ flexShrink: 0 }} />
+                    <span>Hệ thống sẽ tự động trừ số dư ví của hành khách và chuyển doanh thu vào ví tài xế.</span>
+                  </div>
+                )}
               </div>
 
               {/* Modal Footer Actions */}
               <div 
                 style={{ 
-                  padding: '1rem 1.5rem', 
+                  padding: '0.9rem 1.4rem', 
                   backgroundColor: 'var(--bg-subtle)', 
                   borderTop: '1px solid var(--border-light)',
                   display: 'flex', 
@@ -1114,7 +1180,7 @@ export const DriverPage: React.FC = () => {
                   type="submit"
                   className="btn btn-primary"
                   disabled={isSubmittingDropoff}
-                  style={{ fontSize: '0.85rem' }}
+                  style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                 >
                   <CheckCircle2 size={16} />
                   {isSubmittingDropoff ? 'Đang xử lý...' : 'Xác nhận Trả khách & Thanh toán'}
