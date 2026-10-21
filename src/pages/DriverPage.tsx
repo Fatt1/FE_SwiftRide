@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useSignalR } from '../hooks/useSignalR';
 import { 
@@ -65,6 +65,8 @@ export const DriverPage: React.FC = () => {
   const [dropoffGatewayToken, setDropoffGatewayToken] = useState<string>('');
   const [isSubmittingDropoff, setIsSubmittingDropoff] = useState<boolean>(false);
   const [dropoffError, setDropoffError] = useState<string | null>(null);
+  const [paymentCountdown, setPaymentCountdown] = useState<number | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Independent WebSocket connection for Driver Portal
   const { status } = useSignalR({
@@ -205,6 +207,8 @@ export const DriverPage: React.FC = () => {
 
   // Open Dropoff Modal
   const openDropoffModal = (trip: TripItem) => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setPaymentCountdown(null);
     setDropoffModalTrip(trip);
     setDropoffPaymentMethod(0); // Default Wallet
     setDropoffGatewayToken('');
@@ -214,12 +218,14 @@ export const DriverPage: React.FC = () => {
   // Close Dropoff Modal
   const closeDropoffModal = () => {
     if (isSubmittingDropoff) return;
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setPaymentCountdown(null);
     setDropoffModalTrip(null);
     setDropoffError(null);
   };
 
-  // Handle Dropoff Submit
-  const handleConfirmDropoff = async (e: React.FormEvent) => {
+  // 1. Khi tài xế ấn Xác nhận: Bắt đầu đếm ngược 4 giây (Grace Period)
+  const handleInitiateDropoff = (e: React.FormEvent) => {
     e.preventDefault();
     if (!dropoffModalTrip) return;
 
@@ -227,6 +233,52 @@ export const DriverPage: React.FC = () => {
       setDropoffError('Vui lòng nhập Gateway Token cho thanh toán qua Thẻ (tối đa 128 ký tự).');
       return;
     }
+
+    setDropoffError(null);
+
+    // Thiết lập đếm ngược 4 giây
+    let remaining = 4;
+    setPaymentCountdown(remaining);
+
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+    countdownIntervalRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0) {
+        setPaymentCountdown(remaining);
+      } else {
+        // Hết thời gian đếm ngược mà tài xế KHÔNG bấm Hủy: Thực hiện chuyển tiền thật
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+        setPaymentCountdown(null);
+        executeActualPayment();
+      }
+    }, 1000);
+  };
+
+  // 2. Tài xế bấm nút "HỦY THANH TOÁN" trong 3-4 giây đếm ngược
+  const handleCancelPaymentGracePeriod = () => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setPaymentCountdown(null);
+    setIsSubmittingDropoff(false);
+
+    const tripIdShort = dropoffModalTrip ? dropoffModalTrip.id.slice(0, 8) : '';
+    setDropoffModalTrip(null);
+
+    setActionStatus({
+      type: 'rejected',
+      message: `✋ ĐÃ HỦY LỆNH THANH TOÁN cho chuyến #${tripIdShort}! Giao dịch đã được hủy kịp thời, chưa có tiền nào bị trừ và cuốc xe vẫn đang tiếp tục.`,
+    });
+  };
+
+  // 3. Thực hiện gọi API thanh toán thật sau khi đếm ngược kết thúc
+  const executeActualPayment = async () => {
+    if (!dropoffModalTrip) return;
 
     setIsSubmittingDropoff(true);
     setDropoffError(null);
@@ -239,7 +291,7 @@ export const DriverPage: React.FC = () => {
 
       setActionStatus({
         type: 'success',
-        message: `Đã TRẢ KHÁCH thành công (Mã #${dropoffModalTrip.id.slice(0, 8)})! Yêu cầu thanh toán đã được gửi tới hệ thống.`,
+        message: `Đã TRẢ KHÁCH & THANH TOÁN thành công (Mã #${dropoffModalTrip.id.slice(0, 8)})! Yêu cầu thanh toán đã được quyết toán.`,
       });
 
       // Update state locally
@@ -986,224 +1038,308 @@ export const DriverPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleConfirmDropoff}>
-              <div className="modal-body" style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-                {/* Trip Summary Card */}
+            {paymentCountdown !== null ? (
+              /* ======================================================== */
+              /* COUNTDOWN / GRACE PERIOD SCREEN (3-4 GIÂY ĐỂ HỦY)         */
+              /* ======================================================== */
+              <div style={{ padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '1.25rem' }}>
+                {/* Glowing Circular Countdown */}
                 <div 
                   style={{ 
-                    padding: '0.9rem 1.1rem', 
-                    borderRadius: '12px', 
-                    backgroundColor: 'var(--bg-subtle)', 
-                    border: '1px solid var(--border-light)' 
+                    width: '92px', 
+                    height: '92px', 
+                    borderRadius: '50%', 
+                    backgroundColor: '#fffbeb', 
+                    border: '4px solid #f59e0b', 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    boxShadow: '0 0 25px rgba(245, 158, 11, 0.4)',
+                    animation: 'pulse 1s infinite'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem', fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Điểm trả khách:</span>
-                    <strong style={{ maxWidth: '280px', textAlign: 'right', color: 'var(--text-main)' }}>
-                      {dropoffModalTrip.dropoffAddress}
-                    </strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.55rem', borderTop: '1px dashed var(--border-light)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cước phí thanh toán:</span>
-                    <strong style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)' }}>
-                      {formatVND(dropoffModalTrip.estimatedFare)}
-                    </strong>
-                  </div>
+                  <span style={{ fontSize: '2.5rem', fontWeight: 900, color: '#b45309', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+                    {paymentCountdown}s
+                  </span>
                 </div>
 
-                {/* Error Banner if any */}
-                {dropoffError && (
-                  <div 
-                    style={{ 
-                      padding: '0.75rem 1rem', 
-                      borderRadius: '8px', 
-                      backgroundColor: 'var(--accent-rose-subtle)', 
-                      border: '1px solid var(--accent-rose-border, #fecdd3)',
-                      color: 'var(--accent-rose)', 
-                      fontSize: '0.85rem',
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '0.5rem' 
-                    }}
-                  >
-                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                    <span>{dropoffError}</span>
-                  </div>
-                )}
-
-                {/* Field 1: Phương thức thanh toán (Payment Method) */}
                 <div>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: '0.45rem' }}>
-                    Phương thức thanh toán <span style={{ color: 'var(--accent-rose)' }}>*</span>
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    {/* Wallet Option */}
-                    <div 
-                      onClick={() => setDropoffPaymentMethod(0)}
-                      style={{
-                        padding: '0.85rem',
-                        borderRadius: '10px',
-                        border: dropoffPaymentMethod === 0 ? '2px solid var(--primary)' : '1px solid var(--border-light)',
-                        backgroundColor: dropoffPaymentMethod === 0 ? 'var(--primary-subtle)' : '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.35rem',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Wallet size={18} color={dropoffPaymentMethod === 0 ? 'var(--primary)' : 'var(--text-muted)'} />
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: dropoffPaymentMethod === 0 ? 'var(--primary)' : 'var(--text-main)' }}>
-                          Ví SwiftRide
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Trừ tiền trực tiếp số dư ví
-                      </span>
-                    </div>
-
-                    {/* Card Option */}
-                    <div 
-                      onClick={() => {
-                        setDropoffPaymentMethod(1);
-                        if (!dropoffGatewayToken) setDropoffGatewayToken('mock-success');
-                      }}
-                      style={{
-                        padding: '0.85rem',
-                        borderRadius: '10px',
-                        border: dropoffPaymentMethod === 1 ? '2px solid var(--primary)' : '1px solid var(--border-light)',
-                        backgroundColor: dropoffPaymentMethod === 1 ? 'var(--primary-subtle)' : '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.35rem',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <CreditCard size={18} color={dropoffPaymentMethod === 1 ? 'var(--primary)' : 'var(--text-muted)'} />
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: dropoffPaymentMethod === 1 ? 'var(--primary)' : 'var(--text-main)' }}>
-                          Thẻ Quốc Tế
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Visa / Mastercard / JCB
-                      </span>
-                    </div>
-                  </div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                    Đang chuẩn bị gửi giao dịch...
+                  </h3>
+                  <p style={{ margin: '0.45rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '380px' }}>
+                    Hệ thống sẽ thực hiện quyết toán {dropoffPaymentMethod === 1 ? 'qua Thẻ Quốc Tế' : 'qua Ví SwiftRide'} sau <strong>{paymentCountdown} giây</strong>.
+                  </p>
                 </div>
 
-                {/* Field 2: Gateway Token Input */}
-                {dropoffPaymentMethod === 1 ? (
-                  <div>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                      <span>Mã Token Thẻ / Cổng Thanh Toán <span style={{ color: 'var(--accent-rose)' }}>*</span></span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>Tối đa 128 ký tự</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={dropoffGatewayToken}
-                      onChange={(e) => setDropoffGatewayToken(e.target.value)}
-                      placeholder="Nhập mã token thẻ (vd: mock-success, mock-fail, mock-decline)"
-                      maxLength={128}
-                      required
-                      style={{ width: '100%' }}
-                    />
+                {/* Amount Pill */}
+                <div style={{ padding: '0.5rem 1.25rem', borderRadius: '20px', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cước phí:</span>
+                  <strong style={{ fontSize: '1.15rem', color: 'var(--primary)', fontWeight: 800 }}>
+                    {formatVND(dropoffModalTrip.estimatedFare)}
+                  </strong>
+                </div>
 
-                    {/* Sample token quick chips according to MockCardPaymentProcessor */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.6rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mẫu token hỗ trợ bởi Backend:</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                        {[
-                          { token: 'mock-success', desc: 'Thành công', color: '#059669', bg: '#ecfdf5' },
-                          { token: 'mock-fail', desc: 'Test Retry', color: '#d97706', bg: '#fffbeb' },
-                          { token: 'mock-decline', desc: 'Từ chối thẻ', color: '#e11d48', bg: '#fff1f2' },
-                        ].map((item) => {
-                          const isCurrent = dropoffGatewayToken === item.token;
-                          return (
-                            <button
-                              key={item.token}
-                              type="button"
-                              onClick={() => setDropoffGatewayToken(item.token)}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                fontSize: '0.75rem',
-                                padding: '0.25rem 0.55rem',
-                                borderRadius: '7px',
-                                border: isCurrent ? `1.5px solid ${item.color}` : '1px solid var(--border-light)',
-                                backgroundColor: isCurrent ? item.bg : 'var(--bg-subtle)',
-                                color: isCurrent ? item.color : 'var(--text-main)',
-                                cursor: 'pointer',
-                                fontWeight: isCurrent ? 700 : 500,
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>{item.token}</code>
-                              <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>({item.desc})</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div 
-                    style={{ 
-                      padding: '0.75rem 0.9rem', 
-                      borderRadius: '8px', 
-                      backgroundColor: 'var(--bg-subtle)', 
-                      border: '1px solid var(--border-light)',
-                      fontSize: '0.8rem',
-                      color: 'var(--text-muted)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem'
-                    }}
-                  >
-                    <ShieldCheck size={16} className="text-emerald-600" style={{ flexShrink: 0 }} />
-                    <span>Hệ thống sẽ tự động trừ số dư ví của hành khách và chuyển doanh thu vào ví tài xế.</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer Actions */}
-              <div 
-                style={{ 
-                  padding: '0.9rem 1.4rem', 
-                  backgroundColor: 'var(--bg-subtle)', 
-                  borderTop: '1px solid var(--border-light)',
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'flex-end', 
-                  gap: '0.75rem' 
-                }}
-              >
+                {/* Cancel Payment Button */}
                 <button
                   type="button"
-                  className="btn btn-outline"
-                  onClick={closeDropoffModal}
-                  disabled={isSubmittingDropoff}
-                  style={{ fontSize: '0.85rem' }}
+                  onClick={handleCancelPaymentGracePeriod}
+                  style={{
+                    width: '100%',
+                    padding: '0.9rem 1.25rem',
+                    borderRadius: '12px',
+                    backgroundColor: '#fee2e2',
+                    border: '2px solid #ef4444',
+                    color: '#b91c1c',
+                    fontWeight: 800,
+                    fontSize: '0.95rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.65rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(239, 68, 68, 0.25)',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  Hủy bỏ
+                  <XCircle size={20} />
+                  HỦY LỆNH THANH TOÁN (Không trừ tiền)
                 </button>
 
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={isSubmittingDropoff}
-                  style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                >
-                  <CheckCircle2 size={16} />
-                  {isSubmittingDropoff ? 'Đang xử lý...' : 'Xác nhận Trả khách & Thanh toán'}
-                </button>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  * Bấm nút Hủy sẽ dừng ngay việc chuyển tiền và giữ nguyên cuốc xe của bạn.
+                </span>
               </div>
-            </form>
+            ) : (
+              /* Modal Form */
+              <form onSubmit={handleInitiateDropoff}>
+                <div className="modal-body" style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+                  {/* Trip Summary Card */}
+                  <div 
+                    style={{ 
+                      padding: '0.9rem 1.1rem', 
+                      borderRadius: '12px', 
+                      backgroundColor: 'var(--bg-subtle)', 
+                      border: '1px solid var(--border-light)' 
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem', fontSize: '0.85rem' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Điểm trả khách:</span>
+                      <strong style={{ maxWidth: '280px', textAlign: 'right', color: 'var(--text-main)' }}>
+                        {dropoffModalTrip.dropoffAddress}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.55rem', borderTop: '1px dashed var(--border-light)' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cước phí thanh toán:</span>
+                      <strong style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)' }}>
+                        {formatVND(dropoffModalTrip.estimatedFare)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Error Banner if any */}
+                  {dropoffError && (
+                    <div 
+                      style={{ 
+                        padding: '0.75rem 1rem', 
+                        borderRadius: '8px', 
+                        backgroundColor: 'var(--accent-rose-subtle)', 
+                        border: '1px solid var(--accent-rose-border, #fecdd3)',
+                        color: 'var(--accent-rose)', 
+                        fontSize: '0.85rem',
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.5rem' 
+                      }}
+                    >
+                      <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                      <span>{dropoffError}</span>
+                    </div>
+                  )}
+
+                  {/* Field 1: Phương thức thanh toán (Payment Method) */}
+                  <div>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: '0.45rem' }}>
+                      Phương thức thanh toán <span style={{ color: 'var(--accent-rose)' }}>*</span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      {/* Wallet Option */}
+                      <div 
+                        onClick={() => setDropoffPaymentMethod(0)}
+                        style={{
+                          padding: '0.85rem',
+                          borderRadius: '10px',
+                          border: dropoffPaymentMethod === 0 ? '2px solid var(--primary)' : '1px solid var(--border-light)',
+                          backgroundColor: dropoffPaymentMethod === 0 ? 'var(--primary-subtle)' : '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.35rem',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Wallet size={18} color={dropoffPaymentMethod === 0 ? 'var(--primary)' : 'var(--text-muted)'} />
+                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: dropoffPaymentMethod === 0 ? 'var(--primary)' : 'var(--text-main)' }}>
+                            Ví SwiftRide
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Trừ tiền trực tiếp số dư ví
+                        </span>
+                      </div>
+
+                      {/* Card Option */}
+                      <div 
+                        onClick={() => {
+                          setDropoffPaymentMethod(1);
+                          if (!dropoffGatewayToken) setDropoffGatewayToken('mock-success');
+                        }}
+                        style={{
+                          padding: '0.85rem',
+                          borderRadius: '10px',
+                          border: dropoffPaymentMethod === 1 ? '2px solid var(--primary)' : '1px solid var(--border-light)',
+                          backgroundColor: dropoffPaymentMethod === 1 ? 'var(--primary-subtle)' : '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.35rem',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <CreditCard size={18} color={dropoffPaymentMethod === 1 ? 'var(--primary)' : 'var(--text-muted)'} />
+                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: dropoffPaymentMethod === 1 ? 'var(--primary)' : 'var(--text-main)' }}>
+                            Thẻ Quốc Tế
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Visa / Mastercard / JCB
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Field 2: Gateway Token Input */}
+                  {dropoffPaymentMethod === 1 ? (
+                    <div>
+                      <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                        <span>Mã Token Thẻ / Cổng Thanh Toán <span style={{ color: 'var(--accent-rose)' }}>*</span></span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>Tối đa 128 ký tự</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={dropoffGatewayToken}
+                        onChange={(e) => setDropoffGatewayToken(e.target.value)}
+                        placeholder="Nhập mã token thẻ (vd: mock-success, mock-fail, mock-decline)"
+                        maxLength={128}
+                        required
+                        style={{ width: '100%' }}
+                      />
+
+                      {/* Sample token quick chips according to MockCardPaymentProcessor */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.6rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mẫu token hỗ trợ bởi Backend:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          {[
+                            { token: 'mock-success', desc: 'Thành công', color: '#059669', bg: '#ecfdf5' },
+                            { token: 'mock-fail', desc: 'Test Retry', color: '#d97706', bg: '#fffbeb' },
+                            { token: 'mock-decline', desc: 'Từ chối thẻ', color: '#e11d48', bg: '#fff1f2' },
+                          ].map((item) => {
+                            const isCurrent = dropoffGatewayToken === item.token;
+                            return (
+                              <button
+                                key={item.token}
+                                type="button"
+                                onClick={() => setDropoffGatewayToken(item.token)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem',
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.55rem',
+                                  borderRadius: '7px',
+                                  border: isCurrent ? `1.5px solid ${item.color}` : '1px solid var(--border-light)',
+                                  backgroundColor: isCurrent ? item.bg : 'var(--bg-subtle)',
+                                  color: isCurrent ? item.color : 'var(--text-main)',
+                                  cursor: 'pointer',
+                                  fontWeight: isCurrent ? 700 : 500,
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>{item.token}</code>
+                                <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>({item.desc})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div 
+                      style={{ 
+                        padding: '0.75rem 0.9rem', 
+                        borderRadius: '8px', 
+                        backgroundColor: 'var(--bg-subtle)', 
+                        border: '1px solid var(--border-light)',
+                        fontSize: '0.8rem',
+                        color: 'var(--text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <ShieldCheck size={16} className="text-emerald-600" style={{ flexShrink: 0 }} />
+                      <span>Hệ thống sẽ tự động trừ số dư ví của hành khách và chuyển doanh thu vào ví tài xế.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div 
+                  style={{ 
+                    padding: '0.9rem 1.4rem', 
+                    backgroundColor: 'var(--bg-subtle)', 
+                    borderTop: '1px solid var(--border-light)',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'flex-end', 
+                    gap: '0.75rem' 
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={closeDropoffModal}
+                    disabled={isSubmittingDropoff}
+                    style={{ fontSize: '0.85rem' }}
+                  >
+                    Hủy bỏ
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={isSubmittingDropoff}
+                    style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    {isSubmittingDropoff ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Đang chuyển tiền...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={16} />
+                        Xác nhận Trả khách & Thanh toán
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
