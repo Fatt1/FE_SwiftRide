@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useSignalR } from '../hooks/useSignalR';
 import { 
@@ -65,8 +65,7 @@ export const DriverPage: React.FC = () => {
   const [dropoffGatewayToken, setDropoffGatewayToken] = useState<string>('');
   const [isSubmittingDropoff, setIsSubmittingDropoff] = useState<boolean>(false);
   const [dropoffError, setDropoffError] = useState<string | null>(null);
-  const [paymentCountdown, setPaymentCountdown] = useState<number | null>(null);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
 
   // Independent WebSocket connection for Driver Portal
   const { status } = useSignalR({
@@ -207,8 +206,6 @@ export const DriverPage: React.FC = () => {
 
   // Open Dropoff Modal
   const openDropoffModal = (trip: TripItem) => {
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setPaymentCountdown(null);
     setDropoffModalTrip(trip);
     setDropoffPaymentMethod(0); // Default Wallet
     setDropoffGatewayToken('');
@@ -218,13 +215,11 @@ export const DriverPage: React.FC = () => {
   // Close Dropoff Modal
   const closeDropoffModal = () => {
     if (isSubmittingDropoff) return;
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setPaymentCountdown(null);
     setDropoffModalTrip(null);
     setDropoffError(null);
   };
 
-  // 1. Khi tài xế ấn Xác nhận: Bắt đầu đếm ngược 4 giây (Grace Period)
+  // Khi tài xế ấn Xác nhận Trả khách & Thanh toán: Thực hiện quyết toán ngay lập tức
   const handleInitiateDropoff = (e: React.FormEvent) => {
     e.preventDefault();
     if (!dropoffModalTrip) return;
@@ -235,45 +230,7 @@ export const DriverPage: React.FC = () => {
     }
 
     setDropoffError(null);
-
-    // Thiết lập đếm ngược 4 giây
-    let remaining = 4;
-    setPaymentCountdown(remaining);
-
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-
-    countdownIntervalRef.current = setInterval(() => {
-      remaining -= 1;
-      if (remaining > 0) {
-        setPaymentCountdown(remaining);
-      } else {
-        // Hết thời gian đếm ngược mà tài xế KHÔNG bấm Hủy: Thực hiện chuyển tiền thật
-        if (countdownIntervalRef.current) {
-          clearInterval(countdownIntervalRef.current);
-          countdownIntervalRef.current = null;
-        }
-        setPaymentCountdown(null);
-        executeActualPayment();
-      }
-    }, 1000);
-  };
-
-  // 2. Tài xế bấm nút "HỦY THANH TOÁN" trong 3-4 giây đếm ngược
-  const handleCancelPaymentGracePeriod = () => {
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
-    }
-    setPaymentCountdown(null);
-    setIsSubmittingDropoff(false);
-
-    const tripIdShort = dropoffModalTrip ? dropoffModalTrip.id.slice(0, 8) : '';
-    setDropoffModalTrip(null);
-
-    setActionStatus({
-      type: 'rejected',
-      message: `✋ ĐÃ HỦY LỆNH THANH TOÁN cho chuyến #${tripIdShort}! Giao dịch đã được hủy kịp thời, chưa có tiền nào bị trừ và cuốc xe vẫn đang tiếp tục.`,
-    });
+    executeActualPayment();
   };
 
   // 3. Thực hiện gọi API thanh toán thật sau khi đếm ngược kết thúc
@@ -1038,82 +995,8 @@ export const DriverPage: React.FC = () => {
               </button>
             </div>
 
-            {paymentCountdown !== null ? (
-              /* ======================================================== */
-              /* COUNTDOWN / GRACE PERIOD SCREEN (3-4 GIÂY ĐỂ HỦY)         */
-              /* ======================================================== */
-              <div style={{ padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '1.25rem' }}>
-                {/* Glowing Circular Countdown */}
-                <div 
-                  style={{ 
-                    width: '92px', 
-                    height: '92px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#fffbeb', 
-                    border: '4px solid #f59e0b', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    boxShadow: '0 0 25px rgba(245, 158, 11, 0.4)',
-                    animation: 'pulse 1s infinite'
-                  }}
-                >
-                  <span style={{ fontSize: '2.5rem', fontWeight: 900, color: '#b45309', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
-                    {paymentCountdown}s
-                  </span>
-                </div>
-
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    Đang chuẩn bị gửi giao dịch...
-                  </h3>
-                  <p style={{ margin: '0.45rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '380px' }}>
-                    Hệ thống sẽ thực hiện quyết toán {dropoffPaymentMethod === 1 ? 'qua Thẻ Quốc Tế' : 'qua Ví SwiftRide'} sau <strong>{paymentCountdown} giây</strong>.
-                  </p>
-                </div>
-
-                {/* Amount Pill */}
-                <div style={{ padding: '0.5rem 1.25rem', borderRadius: '20px', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cước phí:</span>
-                  <strong style={{ fontSize: '1.15rem', color: 'var(--primary)', fontWeight: 800 }}>
-                    {formatVND(dropoffModalTrip.estimatedFare)}
-                  </strong>
-                </div>
-
-                {/* Cancel Payment Button */}
-                <button
-                  type="button"
-                  onClick={handleCancelPaymentGracePeriod}
-                  style={{
-                    width: '100%',
-                    padding: '0.9rem 1.25rem',
-                    borderRadius: '12px',
-                    backgroundColor: '#fee2e2',
-                    border: '2px solid #ef4444',
-                    color: '#b91c1c',
-                    fontWeight: 800,
-                    fontSize: '0.95rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.65rem',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 15px rgba(239, 68, 68, 0.25)',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <XCircle size={20} />
-                  HỦY LỆNH THANH TOÁN (Không trừ tiền)
-                </button>
-
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                  * Bấm nút Hủy sẽ dừng ngay việc chuyển tiền và giữ nguyên cuốc xe của bạn.
-                </span>
-              </div>
-            ) : (
-              /* Modal Form */
-              <form onSubmit={handleInitiateDropoff}>
+            {/* Modal Form */}
+            <form onSubmit={handleInitiateDropoff}>
                 <div className="modal-body" style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
                   {/* Trip Summary Card */}
                   <div 
@@ -1339,7 +1222,6 @@ export const DriverPage: React.FC = () => {
                   </button>
                 </div>
               </form>
-            )}
           </div>
         </div>
       )}
