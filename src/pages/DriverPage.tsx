@@ -1,28 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useSignalR } from '../hooks/useSignalR';
-import { 
-  fetchDrivers, 
+import {
+  fetchDrivers,
   fetchDriverLocations,
   fetchAllTrips,
-  acceptTrip, 
-  rejectTrip, 
+  acceptTrip,
+  rejectTrip,
   pickupTrip,
   dropoffTrip,
-  DEFAULT_DRIVERS 
+  DEFAULT_DRIVERS
 } from '../services/api';
-import type { 
-  User, 
+import type {
+  User,
   DriverFoundData,
   DriverLocation,
   TripItem
 } from '../types';
-import { 
-  Car, 
-  UserCheck, 
-  CheckCircle2, 
-  XCircle, 
-  Radio, 
+import {
+  Car,
+  UserCheck,
+  CheckCircle2,
+  XCircle,
+  Radio,
   AlertCircle,
   ExternalLink,
   BellRing,
@@ -356,12 +356,12 @@ export const DriverPage: React.FC = () => {
   return (
     <div className="container" style={{ paddingTop: '1.5rem', paddingBottom: '3.5rem' }}>
       {/* Top Header */}
-      <div 
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          flexWrap: 'wrap', 
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
           gap: '1rem',
           marginBottom: '1.5rem',
           paddingBottom: '1rem',
@@ -383,9 +383,9 @@ export const DriverPage: React.FC = () => {
           </p>
         </div>
 
-        <Link 
-          to="/rider" 
-          target="_blank" 
+        <Link
+          to="/rider"
+          target="_blank"
           rel="noopener noreferrer"
           className="btn btn-outline"
           style={{ fontSize: '0.85rem' }}
@@ -399,7 +399,7 @@ export const DriverPage: React.FC = () => {
       {/* Tab Navigation Controls */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="tab-group">
-          <button 
+          <button
             type="button"
             className={`tab-btn ${activeTab === 'drivers' ? 'active' : ''}`}
             onClick={() => setActiveTab('drivers')}
@@ -411,7 +411,7 @@ export const DriverPage: React.FC = () => {
             </span>
           </button>
 
-          <button 
+          <button
             type="button"
             className={`tab-btn ${activeTab === 'trips' ? 'active' : ''}`}
             onClick={() => {
@@ -421,11 +421,11 @@ export const DriverPage: React.FC = () => {
           >
             <Navigation size={16} />
             Quản lý Chuyến đi (Trips)
-            <span 
-              className="badge" 
-              style={{ 
-                fontSize: '0.7rem', 
-                padding: '0.1rem 0.4rem', 
+            <span
+              className="badge"
+              style={{
+                fontSize: '0.7rem',
+                padding: '0.1rem 0.4rem',
                 backgroundColor: activeTab === 'trips' ? 'var(--primary-subtle)' : 'var(--bg-hover)',
                 color: activeTab === 'trips' ? 'var(--primary)' : 'var(--text-muted)'
               }}
@@ -436,11 +436,11 @@ export const DriverPage: React.FC = () => {
         </div>
 
         {activeTab === 'trips' && (
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={loadTrips}
             disabled={isLoadingTrips}
-            className="btn btn-outline" 
+            className="btn btn-outline"
             style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem' }}
           >
             <RefreshCw size={14} className={isLoadingTrips ? 'pulse-animation' : ''} />
@@ -451,26 +451,26 @@ export const DriverPage: React.FC = () => {
 
       {/* Global Action Notifications Banner */}
       {actionStatus && (
-        <div 
-          style={{ 
-            padding: '0.9rem 1.15rem', 
-            borderRadius: '12px', 
+        <div
+          style={{
+            padding: '0.9rem 1.15rem',
+            borderRadius: '12px',
             marginBottom: '1.5rem',
-            border: actionStatus.type === 'success' 
-              ? '1px solid var(--primary-border)' 
-              : actionStatus.type === 'rejected' 
-              ? '1px solid #fde68a' 
-              : '1px solid #fecdd3',
-            backgroundColor: actionStatus.type === 'success' 
-              ? 'var(--primary-subtle)' 
-              : actionStatus.type === 'rejected' 
-              ? 'var(--accent-amber-subtle)' 
-              : 'var(--accent-rose-subtle)',
-            color: actionStatus.type === 'success' 
-              ? 'var(--primary)' 
-              : actionStatus.type === 'rejected' 
-              ? 'var(--accent-amber)' 
-              : 'var(--accent-rose)',
+            border: actionStatus.type === 'success'
+              ? '1px solid var(--primary-border)'
+              : actionStatus.type === 'rejected'
+                ? '1px solid #fde68a'
+                : '1px solid #fecdd3',
+            backgroundColor: actionStatus.type === 'success'
+              ? 'var(--primary-subtle)'
+              : actionStatus.type === 'rejected'
+                ? 'var(--accent-amber-subtle)'
+                : 'var(--accent-rose-subtle)',
+            color: actionStatus.type === 'success'
+              ? 'var(--primary)'
+              : actionStatus.type === 'rejected'
+                ? 'var(--accent-amber)'
+                : 'var(--accent-rose)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -491,7 +491,7 @@ export const DriverPage: React.FC = () => {
             <span>{actionStatus.message}</span>
           </div>
 
-          <button 
+          <button
             type="button"
             onClick={() => setActionStatus(null)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.7 }}
@@ -546,15 +546,15 @@ export const DriverPage: React.FC = () => {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div 
-                          style={{ 
-                            width: '38px', 
-                            height: '38px', 
-                            borderRadius: '10px', 
-                            backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-subtle)', 
+                        <div
+                          style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '10px',
+                            backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-subtle)',
                             color: isSelected ? '#ffffff' : 'var(--text-main)',
-                            display: 'flex', 
-                            alignItems: 'center', 
+                            display: 'flex',
+                            alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 700,
                             fontSize: '0.9rem'
@@ -593,25 +593,25 @@ export const DriverPage: React.FC = () => {
           {/* Right Column: Real-time Incoming Ride Proposal & Action Handlers */}
           <div>
             {incomingTrip ? (
-              <div 
-                className="card" 
-                style={{ 
-                  border: '2px solid var(--primary)', 
+              <div
+                className="card"
+                style={{
+                  border: '2px solid var(--primary)',
                   boxShadow: 'var(--shadow-lg)',
                   animation: 'slideUp 0.3s ease-out'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div 
-                      style={{ 
-                        width: '34px', 
-                        height: '34px', 
-                        borderRadius: '50%', 
-                        backgroundColor: 'var(--primary-subtle)', 
+                    <div
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--primary-subtle)',
                         color: 'var(--primary)',
-                        display: 'flex', 
-                        alignItems: 'center', 
+                        display: 'flex',
+                        alignItems: 'center',
                         justifyContent: 'center'
                       }}
                     >
@@ -694,24 +694,24 @@ export const DriverPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div 
-                className="card" 
-                style={{ 
-                  textAlign: 'center', 
+              <div
+                className="card"
+                style={{
+                  textAlign: 'center',
                   padding: '3.5rem 1.5rem',
                   border: '1.5px dashed var(--border-light)',
                   backgroundColor: '#ffffff'
                 }}
               >
-                <div 
-                  style={{ 
-                    width: '56px', 
-                    height: '56px', 
-                    borderRadius: '16px', 
-                    backgroundColor: 'var(--primary-subtle)', 
-                    color: 'var(--primary)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                <div
+                  style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '16px',
+                    backgroundColor: 'var(--primary-subtle)',
+                    color: 'var(--primary)',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     margin: '0 auto 1rem auto'
                   }}
@@ -745,16 +745,16 @@ export const DriverPage: React.FC = () => {
       {activeTab === 'trips' && (
         <div>
           {/* Filters Bar */}
-          <div 
-            className="card" 
-            style={{ 
-              marginBottom: '1.5rem', 
+          <div
+            className="card"
+            style={{
+              marginBottom: '1.5rem',
               padding: '1rem 1.25rem',
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              flexWrap: 'wrap', 
-              gap: '1rem' 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '1rem'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -790,9 +790,9 @@ export const DriverPage: React.FC = () => {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.825rem', cursor: 'pointer', color: 'var(--text-main)', fontWeight: 600 }}>
-                <input 
-                  type="checkbox" 
-                  checked={filterByDriver} 
+                <input
+                  type="checkbox"
+                  checked={filterByDriver}
                   onChange={(e) => setFilterByDriver(e.target.checked)}
                   style={{ cursor: 'pointer' }}
                 />
@@ -803,10 +803,10 @@ export const DriverPage: React.FC = () => {
 
           {/* Trips Cards Grid */}
           {filteredTrips.length === 0 ? (
-            <div 
-              className="card" 
-              style={{ 
-                textAlign: 'center', 
+            <div
+              className="card"
+              style={{
+                textAlign: 'center',
                 padding: '3.5rem 1.5rem',
                 border: '1px dashed var(--border-light)'
               }}
@@ -828,10 +828,10 @@ export const DriverPage: React.FC = () => {
                 const isCompleted = trip.status === 'Completed' || trip.status === 'DroppedOff';
 
                 return (
-                  <div 
-                    key={trip.id} 
-                    className="card" 
-                    style={{ 
+                  <div
+                    key={trip.id}
+                    className="card"
+                    style={{
                       padding: '1.25rem 1.5rem',
                       border: isAccepted ? '1.5px solid #93c5fd' : isPickedUp ? '1.5px solid #c4b5fd' : '1px solid var(--border-light)',
                       boxShadow: isAccepted || isPickedUp ? 'var(--shadow-md)' : 'none',
@@ -894,15 +894,15 @@ export const DriverPage: React.FC = () => {
                     </div>
 
                     {/* State Transitions / Action Buttons Area */}
-                    <div 
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between', 
-                        flexWrap: 'wrap', 
-                        gap: '0.75rem', 
-                        paddingTop: '0.75rem', 
-                        borderTop: '1px solid var(--border-light)' 
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '0.75rem',
+                        paddingTop: '0.75rem',
+                        borderTop: '1px solid var(--border-light)'
                       }}
                     >
                       {/* Left: State explanation */}
@@ -936,8 +936,8 @@ export const DriverPage: React.FC = () => {
                             onClick={() => handlePickup(trip.id)}
                             disabled={pickupProcessingId === trip.id}
                             className="btn btn-primary"
-                            style={{ 
-                              padding: '0.55rem 1.15rem', 
+                            style={{
+                              padding: '0.55rem 1.15rem',
                               fontSize: '0.875rem',
                               backgroundColor: '#2563eb',
                               borderColor: '#2563eb'
@@ -954,8 +954,8 @@ export const DriverPage: React.FC = () => {
                             type="button"
                             onClick={() => openDropoffModal(trip)}
                             className="btn btn-primary"
-                            style={{ 
-                              padding: '0.55rem 1.15rem', 
+                            style={{
+                              padding: '0.55rem 1.15rem',
                               fontSize: '0.875rem',
                               backgroundColor: '#059669',
                               borderColor: '#059669'
@@ -980,23 +980,23 @@ export const DriverPage: React.FC = () => {
       {/* ======================================================== */}
       {dropoffModalTrip && (
         <div className="modal-overlay" onClick={closeDropoffModal}>
-          <div 
-            className="modal-dialog" 
-            style={{ 
-              maxWidth: '520px', 
+          <div
+            className="modal-dialog"
+            style={{
+              maxWidth: '520px',
               backgroundColor: '#ffffff',
               borderRadius: '16px',
               border: '1px solid var(--border-light)',
               boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.25)',
               overflow: 'hidden'
-            }} 
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div 
-              className="modal-header" 
-              style={{ 
-                padding: '1.15rem 1.4rem', 
+            <div
+              className="modal-header"
+              style={{
+                padding: '1.15rem 1.4rem',
                 borderBottom: '1px solid var(--border-light)',
                 display: 'flex',
                 alignItems: 'center',
@@ -1005,16 +1005,16 @@ export const DriverPage: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <div 
-                  style={{ 
-                    width: '36px', 
-                    height: '36px', 
-                    borderRadius: '10px', 
-                    backgroundColor: 'var(--primary-subtle)', 
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: 'var(--primary-subtle)',
                     color: 'var(--primary)',
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
                   <CheckCircle2 size={20} />
@@ -1028,8 +1028,8 @@ export const DriverPage: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="modal-close-btn"
                 onClick={closeDropoffModal}
                 disabled={isSubmittingDropoff}
@@ -1044,17 +1044,17 @@ export const DriverPage: React.FC = () => {
               /* ======================================================== */
               <div style={{ padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '1.25rem' }}>
                 {/* Glowing Circular Countdown */}
-                <div 
-                  style={{ 
-                    width: '92px', 
-                    height: '92px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#fffbeb', 
-                    border: '4px solid #f59e0b', 
-                    display: 'flex', 
+                <div
+                  style={{
+                    width: '92px',
+                    height: '92px',
+                    borderRadius: '50%',
+                    backgroundColor: '#fffbeb',
+                    border: '4px solid #f59e0b',
+                    display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     boxShadow: '0 0 25px rgba(245, 158, 11, 0.4)',
                     animation: 'pulse 1s infinite'
                   }}
@@ -1116,12 +1116,12 @@ export const DriverPage: React.FC = () => {
               <form onSubmit={handleInitiateDropoff}>
                 <div className="modal-body" style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
                   {/* Trip Summary Card */}
-                  <div 
-                    style={{ 
-                      padding: '0.9rem 1.1rem', 
-                      borderRadius: '12px', 
-                      backgroundColor: 'var(--bg-subtle)', 
-                      border: '1px solid var(--border-light)' 
+                  <div
+                    style={{
+                      padding: '0.9rem 1.1rem',
+                      borderRadius: '12px',
+                      backgroundColor: 'var(--bg-subtle)',
+                      border: '1px solid var(--border-light)'
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem', fontSize: '0.85rem' }}>
@@ -1140,17 +1140,17 @@ export const DriverPage: React.FC = () => {
 
                   {/* Error Banner if any */}
                   {dropoffError && (
-                    <div 
-                      style={{ 
-                        padding: '0.75rem 1rem', 
-                        borderRadius: '8px', 
-                        backgroundColor: 'var(--accent-rose-subtle)', 
+                    <div
+                      style={{
+                        padding: '0.75rem 1rem',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--accent-rose-subtle)',
                         border: '1px solid var(--accent-rose-border, #fecdd3)',
-                        color: 'var(--accent-rose)', 
+                        color: 'var(--accent-rose)',
                         fontSize: '0.85rem',
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.5rem' 
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
                       }}
                     >
                       <AlertCircle size={16} style={{ flexShrink: 0 }} />
@@ -1165,7 +1165,7 @@ export const DriverPage: React.FC = () => {
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                       {/* Wallet Option */}
-                      <div 
+                      <div
                         onClick={() => setDropoffPaymentMethod(0)}
                         style={{
                           padding: '0.85rem',
@@ -1191,7 +1191,7 @@ export const DriverPage: React.FC = () => {
                       </div>
 
                       {/* Card Option */}
-                      <div 
+                      <div
                         onClick={() => {
                           setDropoffPaymentMethod(1);
                           if (!dropoffGatewayToken) setDropoffGatewayToken('mock-success');
@@ -1278,11 +1278,11 @@ export const DriverPage: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div 
-                      style={{ 
-                        padding: '0.75rem 0.9rem', 
-                        borderRadius: '8px', 
-                        backgroundColor: 'var(--bg-subtle)', 
+                    <div
+                      style={{
+                        padding: '0.75rem 0.9rem',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-subtle)',
                         border: '1px solid var(--border-light)',
                         fontSize: '0.8rem',
                         color: 'var(--text-muted)',
@@ -1298,15 +1298,15 @@ export const DriverPage: React.FC = () => {
                 </div>
 
                 {/* Modal Footer Actions */}
-                <div 
-                  style={{ 
-                    padding: '0.9rem 1.4rem', 
-                    backgroundColor: 'var(--bg-subtle)', 
+                <div
+                  style={{
+                    padding: '0.9rem 1.4rem',
+                    backgroundColor: 'var(--bg-subtle)',
                     borderTop: '1px solid var(--border-light)',
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'flex-end', 
-                    gap: '0.75rem' 
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: '0.75rem'
                   }}
                 >
                   <button
