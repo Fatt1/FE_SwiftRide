@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSignalR } from '../hooks/useSignalR';
 import { PriceBreakdownModal } from '../components/PriceBreakdownModal';
 import { WalletSection } from '../components/WalletSection';
+import { LeafletMap } from '../components/LeafletMap';
 import { 
   createTrip, 
   matchDriver, 
   fetchUserWallet,
   fetchWalletLedger,
+  fetchDriverLocations,
+  DEFAULT_DRIVER_LOCATIONS,
   type CreateTripRequest 
 } from '../services/api';
 import type { 
@@ -16,8 +19,17 @@ import type {
   TripAcceptedData, 
   DriverRejectedData,
   Wallet,
-  LedgerEntry
+  LedgerEntry,
+  DriverLocation
 } from '../types';
+import { 
+  POPULAR_LOCATIONS, 
+  calculateDistanceKm, 
+  estimateDurationMinutes, 
+  reverseGeocode,
+  type Coordinates,
+  type PopularLocation
+} from '../utils/mapUtils';
 import { 
   Navigation, 
   MapPin, 
@@ -30,19 +42,21 @@ import {
   XCircle, 
   Radio, 
   Receipt, 
-  RefreshCw,
-  ExternalLink,
-  Tag,
-  Wallet as WalletIcon,
-  CreditCard
+  RefreshCw, 
+  ExternalLink, 
+  Tag, 
+  Wallet as WalletIcon, 
+  CreditCard,
+  Crosshair,
+  Check,
+  Compass
 } from 'lucide-react';
-
 
 const PRESET_ROUTES = [
   {
     name: 'Chợ Bến Thành ➔ Landmark 81',
-    pickup: 'Chợ Bến Thành, Quận 1, TP.HCM',
-    dropoff: 'Landmark 81, Bình Thạnh, TP.HCM',
+    pickup: 'Chợ Bến Thành, Đường Lê Lợi, Phường Bến Thành, Quận 1',
+    dropoff: 'Landmark 81, 720A Điện Biên Phủ, Phường 22, Bình Thạnh',
     pickupLat: 10.7725,
     pickupLng: 106.6980,
     dropoffLat: 10.7950,
@@ -50,8 +64,8 @@ const PRESET_ROUTES = [
   },
   {
     name: 'Sân bay Tân Sơn Nhất ➔ Bitexco Tower',
-    pickup: 'Sân bay Tân Sơn Nhất, Tân Bình',
-    dropoff: 'Tòa nhà Bitexco, Quận 1',
+    pickup: 'Sân bay Tân Sơn Nhất, Đường Trường Sơn, Tân Bình',
+    dropoff: 'Tòa nhà Bitexco, Số 2 Hải Triều, Quận 1',
     pickupLat: 10.8185,
     pickupLng: 106.6588,
     dropoffLat: 10.7716,
@@ -59,7 +73,7 @@ const PRESET_ROUTES = [
   },
   {
     name: 'Đại Học Sài Gòn (SGU) ➔ Phố đi bộ Nguyễn Huệ',
-    pickup: '273 An Dương Vương, Phường 3, Quận 5',
+    pickup: 'Đại Học Sài Gòn, 273 An Dương Vương, Quận 5',
     dropoff: 'Phố đi bộ Nguyễn Huệ, Quận 1',
     pickupLat: 10.7599,
     pickupLng: 106.6823,
@@ -82,10 +96,24 @@ export const RiderPage: React.FC = () => {
   const [acceptedData, setAcceptedData] = useState<TripAcceptedData | null>(null);
   const [rejectedData, setRejectedData] = useState<DriverRejectedData | null>(null);
 
-  // Form states
-  const [selectedPresetIndex, setSelectedPresetIndex] = useState<number>(0);
+  // Form states - Dynamic Coordinates & Address
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState<number | null>(0);
+  const [pickupCoords, setPickupCoords] = useState<Coordinates>({
+    lat: PRESET_ROUTES[0].pickupLat,
+    lng: PRESET_ROUTES[0].pickupLng,
+  });
+  const [dropoffCoords, setDropoffCoords] = useState<Coordinates>({
+    lat: PRESET_ROUTES[0].dropoffLat,
+    lng: PRESET_ROUTES[0].dropoffLng,
+  });
   const [pickupAddress, setPickupAddress] = useState<string>(PRESET_ROUTES[0].pickup);
   const [dropoffAddress, setDropoffAddress] = useState<string>(PRESET_ROUTES[0].dropoff);
+
+  // Map selecting mode ('pickup' | 'dropoff' | null)
+  const [selectingMode, setSelectingMode] = useState<'pickup' | 'dropoff' | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState<boolean>(false);
+
+  // Extra options
   const [isRaining, setIsRaining] = useState<boolean>(false);
   const [hasToll, setHasToll] = useState<boolean>(false);
   const [promoCode, setPromoCode] = useState<string>('');
@@ -102,6 +130,9 @@ export const RiderPage: React.FC = () => {
   const [isLoadingWallet, setIsLoadingWallet] = useState<boolean>(false);
   const [isLoadingLedger, setIsLoadingLedger] = useState<boolean>(false);
 
+  // Driver locations for live map display
+  const [availableDrivers, setAvailableDrivers] = useState<DriverLocation[]>(DEFAULT_DRIVER_LOCATIONS);
+
   // Fetch Wallet and Ledger data
   const loadWalletAndLedger = useCallback(async () => {
     if (!currentRiderId) return;
@@ -117,7 +148,7 @@ export const RiderPage: React.FC = () => {
         fetchWalletLedger(currentRiderId).catch((e) => {
           console.warn('Cannot fetch ledger:', e);
           return [];
-        })
+        }),
       ]);
 
       if (walletData) setWallet(walletData);
@@ -130,10 +161,12 @@ export const RiderPage: React.FC = () => {
 
   useEffect(() => {
     loadWalletAndLedger();
+    fetchDriverLocations().then((locs) => {
+      if (locs && locs.length > 0) setAvailableDrivers(locs);
+    });
   }, [loadWalletAndLedger]);
 
-
-  // Real-time WebSocket connection (without raw logs)
+  // Real-time WebSocket connection
   const { status } = useSignalR({
     roleName: 'Rider',
     onTripAccepted: (data) => {
@@ -152,12 +185,95 @@ export const RiderPage: React.FC = () => {
     },
   });
 
+  // Tính khoảng cách & thời gian di chuyển ước tính
+  const calculatedDistance = useMemo(() => {
+    return calculateDistanceKm(
+      pickupCoords.lat,
+      pickupCoords.lng,
+      dropoffCoords.lat,
+      dropoffCoords.lng
+    );
+  }, [pickupCoords, dropoffCoords]);
+
+  const estimatedMinutes = useMemo(() => {
+    return estimateDurationMinutes(calculatedDistance);
+  }, [calculatedDistance]);
+
+  // Thông số đo đạc từ tuyến đường thực tế (OSRM Road Navigation)
+  const [roadMetrics, setRoadMetrics] = useState<{ distanceKm: number; durationMinutes: number } | null>(null);
+
+  const displayDistance = roadMetrics?.distanceKm ?? calculatedDistance;
+  const displayDuration = roadMetrics?.durationMinutes ?? estimatedMinutes;
+
+  const handleRouteCalculated = useCallback((distanceKm: number, durationMinutes: number) => {
+    setRoadMetrics((prev) => {
+      if (prev && prev.distanceKm === distanceKm && prev.durationMinutes === durationMinutes) {
+        return prev;
+      }
+      return { distanceKm, durationMinutes };
+    });
+  }, []);
+
+  const pickupProp = useMemo(() => ({
+    lat: pickupCoords.lat,
+    lng: pickupCoords.lng,
+    address: pickupAddress,
+  }), [pickupCoords.lat, pickupCoords.lng, pickupAddress]);
+
+  const dropoffProp = useMemo(() => ({
+    lat: dropoffCoords.lat,
+    lng: dropoffCoords.lng,
+    address: dropoffAddress,
+  }), [dropoffCoords.lat, dropoffCoords.lng, dropoffAddress]);
+
+  // Xử lý chọn lộ trình mẫu
   const handleSelectPreset = (index: number) => {
     setSelectedPresetIndex(index);
-    setPickupAddress(PRESET_ROUTES[index].pickup);
-    setDropoffAddress(PRESET_ROUTES[index].dropoff);
+    const route = PRESET_ROUTES[index];
+    setPickupAddress(route.pickup);
+    setDropoffAddress(route.dropoff);
+    setPickupCoords({ lat: route.pickupLat, lng: route.pickupLng });
+    setDropoffCoords({ lat: route.dropoffLat, lng: route.dropoffLng });
+    setSelectingMode(null);
   };
 
+  // Xử lý chọn địa danh phổ biến
+  const handleSelectPopularLocation = (loc: PopularLocation, target: 'pickup' | 'dropoff') => {
+    setSelectedPresetIndex(null);
+    if (target === 'pickup') {
+      setPickupCoords({ lat: loc.lat, lng: loc.lng });
+      setPickupAddress(loc.address);
+    } else {
+      setDropoffCoords({ lat: loc.lat, lng: loc.lng });
+      setDropoffAddress(loc.address);
+    }
+    setSelectingMode(null);
+  };
+
+  // Xử lý khi click chọn hoặc kéo marker trên Leaflet Map
+  const handleSelectCoordinatesFromMap = async (coords: Coordinates, mode: 'pickup' | 'dropoff') => {
+    setSelectedPresetIndex(null);
+    setIsGeocoding(true);
+
+    if (mode === 'pickup') {
+      setPickupCoords(coords);
+      const addr = await reverseGeocode(coords.lat, coords.lng);
+      setPickupAddress(addr);
+    } else {
+      setDropoffCoords(coords);
+      const addr = await reverseGeocode(coords.lat, coords.lng);
+      setDropoffAddress(addr);
+    }
+
+    setIsGeocoding(false);
+  };
+
+  // Bấm Áp dụng chọn điểm
+  const handleApplySelection = () => {
+    setSelectingMode(null);
+  };
+
+  // Tạo chuyến đi với tọa độ linh hoạt
   const handleCreateTrip = async () => {
     setErrorMessage(null);
     setMatchSuccessMessage(null);
@@ -166,22 +282,24 @@ export const RiderPage: React.FC = () => {
     setIsCreatingTrip(true);
 
     try {
-      const preset = PRESET_ROUTES[selectedPresetIndex];
       const payload: CreateTripRequest = {
         riderId: currentRiderId,
         pickupAddress,
         dropoffAddress,
-        pickupLat: preset.pickupLat,
-        pickupLng: preset.pickupLng,
-        dropoffLat: preset.dropoffLat,
-        dropoffLng: preset.dropoffLng,
+        pickupLat: pickupCoords.lat,
+        pickupLng: pickupCoords.lng,
+        dropoffLat: dropoffCoords.lat,
+        dropoffLng: dropoffCoords.lng,
         hasToll,
         isRaining,
         promoCode: promoCode.trim() || undefined,
+        distanceKm: Number(displayDistance.toFixed(1)),
+        estimatedMinutes: Math.max(1, Math.round(displayDuration)),
       };
 
       const res = await createTrip(payload);
       setCurrentTrip(res);
+      setSelectingMode(null);
     } catch (err: any) {
       setErrorMessage(err.message || 'Lỗi khi tạo chuyến đi');
     } finally {
@@ -204,7 +322,9 @@ export const RiderPage: React.FC = () => {
         riderId: currentRiderId,
       });
 
-      setMatchSuccessMessage(`Đã phát tín hiệu tìm tài xế! Hệ thống đã ghép nối với tài xế ${res.fullName || ''}. Đang chờ phản hồi...`);
+      setMatchSuccessMessage(
+        `Đã phát tín hiệu tìm tài xế! Hệ thống đã ghép nối với tài xế ${res.fullName || ''}. Đang chờ phản hồi qua WebSocket...`
+      );
     } catch (err: any) {
       setIsMatching(false);
       setErrorMessage(err.message || 'Không thể tìm tài xế lúc này.');
@@ -216,9 +336,28 @@ export const RiderPage: React.FC = () => {
     return Number(val).toLocaleString('vi-VN') + ' ₫';
   };
 
+  // Vị trí tài xế đã nhận chuyến (nếu có)
+  const acceptedDriverLocation = useMemo(() => {
+    if (!acceptedData?.driverId) return null;
+    const match = availableDrivers.find((d) => d.driverId === acceptedData.driverId);
+    if (match) {
+      return {
+        lat: match.latitude,
+        lng: match.longitude,
+        name: acceptedData.driverName || match.fullName,
+      };
+    }
+    // Tọa độ gần điểm đón
+    return {
+      lat: pickupCoords.lat + 0.004,
+      lng: pickupCoords.lng - 0.003,
+      name: acceptedData.driverName || 'Tài xế đã nhận',
+    };
+  }, [acceptedData, availableDrivers, pickupCoords]);
+
   return (
     <div className="container" style={{ paddingTop: '1.5rem', paddingBottom: '3.5rem' }}>
-      {/* Top Banner & Quick Portal Switcher */}
+      {/* Top Banner & Portal Switcher */}
       <div 
         style={{ 
           display: 'flex', 
@@ -242,7 +381,7 @@ export const RiderPage: React.FC = () => {
             </span>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            Cổng hành khách SwiftRide • Tạo chuyến xe và cập nhật hành trình thời gian thực
+            Cổng hành khách SwiftRide • Tương tác trực tiếp trên bản đồ Leaflet & ghép cuốc thời gian thực
           </p>
         </div>
 
@@ -262,7 +401,7 @@ export const RiderPage: React.FC = () => {
       <div className="grid-2" style={{ alignItems: 'flex-start' }}>
         {/* Left Column: Rider Profile & Booking Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Rider Profile Card - Only displays this current rider */}
+          {/* Rider Profile Card */}
           <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
@@ -311,14 +450,23 @@ export const RiderPage: React.FC = () => {
 
           {/* Booking Form */}
           <div className="card">
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Navigation size={18} className="text-emerald-600" />
-              Lựa chọn hành trình di chuyển
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Navigation size={18} className="text-emerald-600" />
+                Lựa chọn hành trình di chuyển
+              </h3>
+
+              {isGeocoding && (
+                <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
+                  <RefreshCw size={11} className="pulse-animation" />
+                  Đang lấy tên địa chỉ...
+                </span>
+              )}
+            </div>
 
             {/* Quick Route Presets */}
             <div style={{ marginBottom: '1.25rem' }}>
-              <label className="form-label">Chọn nhanh lộ trình mẫu phổ biến:</label>
+              <label className="form-label" style={{ fontWeight: 600 }}>Lộ trình gợi ý nhanh:</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 {PRESET_ROUTES.map((route, idx) => (
                   <button
@@ -344,36 +492,161 @@ export const RiderPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Map Selection Controls Toolbar */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-subtle)', 
+                padding: '0.85rem', 
+                borderRadius: '12px', 
+                marginBottom: '1.25rem',
+                border: '1px solid var(--border-light)' 
+              }}
+            >
+              <span style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                📍 CHỌN ĐỊA ĐIỂM TRỰC TIẾP TRÊN BẢN ĐỒ LEAFLET:
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectingMode(selectingMode === 'pickup' ? null : 'pickup')}
+                  className={`btn ${selectingMode === 'pickup' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ fontSize: '0.825rem', padding: '0.45rem 0.75rem' }}
+                >
+                  <MapPin size={14} className={selectingMode === 'pickup' ? '' : 'text-emerald-600'} />
+                  {selectingMode === 'pickup' ? 'Đang chọn Điểm đón...' : 'Chọn Điểm Đón trên Map'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectingMode(selectingMode === 'dropoff' ? null : 'dropoff')}
+                  className={`btn ${selectingMode === 'dropoff' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ 
+                    fontSize: '0.825rem', 
+                    padding: '0.45rem 0.75rem',
+                    backgroundColor: selectingMode === 'dropoff' ? '#e11d48' : undefined,
+                    borderColor: selectingMode === 'dropoff' ? '#e11d48' : undefined
+                  }}
+                >
+                  <Crosshair size={14} className={selectingMode === 'dropoff' ? '' : 'text-rose-500'} />
+                  {selectingMode === 'dropoff' ? 'Đang chọn Điểm đến...' : 'Chọn Điểm Đến trên Map'}
+                </button>
+
+                {selectingMode && (
+                  <button
+                    type="button"
+                    onClick={handleApplySelection}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.825rem', padding: '0.45rem 0.75rem', color: 'var(--primary)', borderColor: 'var(--primary-border)' }}
+                  >
+                    <Check size={14} />
+                    Áp dụng chọn
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Pickup & Dropoff Inputs */}
             <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <MapPin size={14} className="text-emerald-600" />
-                Điểm đón (Pickup):
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
+                  <MapPin size={14} className="text-emerald-600" />
+                  Điểm đón (Pickup):
+                </label>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  [{pickupCoords.lat.toFixed(4)}, {pickupCoords.lng.toFixed(4)}]
+                </span>
+              </div>
               <input
                 type="text"
                 className="form-input"
                 value={pickupAddress}
                 onChange={(e) => setPickupAddress(e.target.value)}
-                placeholder="Nhập địa chỉ đón..."
+                placeholder="Nhập địa chỉ đón hoặc click trên bản đồ..."
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <MapPin size={14} className="text-rose-500" />
-                Điểm đến (Dropoff):
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
+                  <MapPin size={14} className="text-rose-500" />
+                  Điểm đến (Dropoff):
+                </label>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  [{dropoffCoords.lat.toFixed(4)}, {dropoffCoords.lng.toFixed(4)}]
+                </span>
+              </div>
               <input
                 type="text"
                 className="form-input"
                 value={dropoffAddress}
                 onChange={(e) => setDropoffAddress(e.target.value)}
-                placeholder="Nhập địa chỉ đến..."
+                placeholder="Nhập địa chỉ đến hoặc click trên bản đồ..."
               />
             </div>
 
-            {/* Weather, Toll & Promo Code */}
+            {/* Popular Landmarks Quick Chips */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                Gắn nhanh địa danh nổi tiếng:
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {POPULAR_LOCATIONS.slice(0, 6).map((loc, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectPopularLocation(loc, selectingMode === 'dropoff' ? 'dropoff' : 'pickup')}
+                    title={`Đặt làm ${selectingMode === 'dropoff' ? 'Điểm đến' : 'Điểm đón'}: ${loc.address}`}
+                    style={{
+                      padding: '0.25rem 0.55rem',
+                      fontSize: '0.75rem',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-light)',
+                      backgroundColor: '#ffffff',
+                      color: 'var(--text-main)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + {loc.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Distance & Duration Estimate Info Banner */}
+            <div 
+              style={{ 
+                padding: '0.85rem', 
+                backgroundColor: 'var(--primary-subtle)', 
+                borderRadius: '10px', 
+                border: '1px solid var(--primary-border)',
+                marginBottom: '1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.5rem'
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block' }}>Khoảng cách ước tính</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary)' }}>
+                  ~{displayDistance.toFixed(1)} km
+                </span>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block' }}>Thời gian di chuyển</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  ~{displayDuration} phút
+                </span>
+              </div>
+
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '140px', textAlign: 'right' }}>
+                {roadMetrics ? '🛣️ Theo dẫn đường thực tế' : 'Tự động tính theo GPS'}
+              </div>
+            </div>
+
+            {/* Weather & Toll options */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
               <label className="form-checkbox">
                 <input
@@ -395,11 +668,12 @@ export const RiderPage: React.FC = () => {
                 />
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <ShieldAlert size={16} className="text-amber-500" />
-                  Có trạm thu phí (+15k)
+                  Có trạm thu phí (+10k)
                 </span>
               </label>
             </div>
 
+            {/* Promo Code */}
             <div className="form-group" style={{ marginBottom: '1.25rem' }}>
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Tag size={14} className="text-emerald-600" />
@@ -418,7 +692,7 @@ export const RiderPage: React.FC = () => {
             <div style={{ marginBottom: '1.5rem' }}>
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <WalletIcon size={14} className="text-emerald-600" />
-                Phương thức thanh toán chuyến đi:
+                Phương thức thanh toán:
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <button
@@ -443,7 +717,7 @@ export const RiderPage: React.FC = () => {
                     Ví SwiftRide
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Số dư: <strong style={{ color: paymentMethod === 'Wallet' ? 'var(--primary)' : 'var(--text-main)' }}>{formatVND(wallet?.balance)}</strong>
+                    Số dư: {formatVND(wallet?.balance)}
                   </div>
                 </button>
 
@@ -499,7 +773,7 @@ export const RiderPage: React.FC = () => {
             >
               {isCreatingTrip ? (
                 <>
-                  <RefreshCw size={16} className="animate-spin" />
+                  <RefreshCw size={16} className="pulse-animation" />
                   Đang tính giá & tạo chuyến...
                 </>
               ) : (
@@ -511,7 +785,7 @@ export const RiderPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Wallet Section (Hiển thị số tiền ví, ledger và cho phép nạp tiền khi thanh toán bằng ví) */}
+          {/* Wallet Section */}
           {paymentMethod === 'Wallet' && (
             <WalletSection
               userId={currentRiderId}
@@ -540,10 +814,66 @@ export const RiderPage: React.FC = () => {
           )}
         </div>
 
-
-        {/* Right Column: Trip Info, Price Breakdown & Real-time Matching State */}
+        {/* Right Column: Leaflet Map & Trip Status Details */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {currentTrip ? (
+          {/* LEAFLET MAP COMPONENT */}
+          <div className="card" style={{ padding: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.45rem', margin: 0 }}>
+                <Compass size={17} className="text-emerald-600" />
+                Bản đồ lộ trình tương tác Leaflet
+              </h3>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <span>🟢 Điểm đón</span>
+                <span>•</span>
+                <span>🎯 Điểm đến</span>
+                {acceptedDriverLocation && (
+                  <>
+                    <span>•</span>
+                    <span style={{ color: '#2563eb', fontWeight: 600 }}>🚗 {acceptedDriverLocation.name || 'Tài xế'}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <LeafletMap
+              pickup={pickupProp}
+              dropoff={dropoffProp}
+              driver={acceptedDriverLocation}
+              selectingMode={selectingMode}
+              onSelectCoordinates={handleSelectCoordinatesFromMap}
+              onRouteCalculated={handleRouteCalculated}
+              height="380px"
+              interactive={!currentTrip}
+            />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span>
+                {selectingMode ? (
+                  <strong style={{ color: selectingMode === 'pickup' ? '#059669' : '#e11d48' }}>
+                    ● Đang chọn: {selectingMode === 'pickup' ? 'Điểm đón' : 'Điểm đến'} (Nhấp vào bản đồ hoặc kéo ghim)
+                  </strong>
+                ) : (
+                  '💡 Mẹo: Nhấp vào các nút chọn trên form hoặc kéo marker để thay đổi vị trí'
+                )}
+              </span>
+
+              {selectingMode && (
+                <button
+                  type="button"
+                  onClick={handleApplySelection}
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
+                >
+                  Xác nhận vị trí này
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Trip Details Card (If Trip is Created) */}
+          {currentTrip && (
             <div className="card" style={{ border: '1.5px solid var(--primary-border)' }}>
               {/* Trip Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
@@ -592,17 +922,19 @@ export const RiderPage: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
                 <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '10px' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Khoảng cách</span>
-                  <span style={{ fontSize: '1rem', fontWeight: 700 }}>{currentTrip.distanceKm ? `${currentTrip.distanceKm.toFixed(1)} km` : '~5.0 km'}</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 700 }}>
+                    {currentTrip.distanceKm ? `${currentTrip.distanceKm.toFixed(1)} km` : `~${displayDistance.toFixed(1)} km`}
+                  </span>
                 </div>
                 <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '10px' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Thời gian ước tính</span>
                   <span style={{ fontSize: '1rem', fontWeight: 700 }}>
-                    {currentTrip.pricing?.estimatedMinutes ? `~${currentTrip.pricing.estimatedMinutes} phút` : '~15 phút'}
+                    {currentTrip.pricing?.estimatedMinutes ? `~${currentTrip.pricing.estimatedMinutes} phút` : `~${displayDuration} phút`}
                   </span>
                 </div>
               </div>
 
-              {/* Price Section with "Xem chi tiết giá" button as requested */}
+              {/* Price Section with "Xem chi tiết giá" button */}
               <div 
                 style={{ 
                   backgroundColor: 'var(--primary-subtle)', 
@@ -622,7 +954,6 @@ export const RiderPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* The requested "Xem chi tiết" button */}
                   <button
                     type="button"
                     onClick={() => setIsPriceModalOpen(true)}
@@ -704,73 +1035,41 @@ export const RiderPage: React.FC = () => {
                 >
                   {isMatching ? (
                     <>
-                      <Search size={16} className="animate-spin" />
-                      Đang tìm kiếm tài xế gần bạn nhất...
+                      <RefreshCw size={16} className="pulse-animation" />
+                      Đang tìm kiếm tài xế gần nhất...
                     </>
                   ) : (
                     <>
                       <Search size={16} />
-                      {rejectedData ? 'Tìm tài xế khác ngay' : 'Tìm tài xế ngay'}
+                      Tìm tài xế ngay
                     </>
                   )}
                 </button>
               )}
 
-              {matchSuccessMessage && !acceptedData && !rejectedData && (
+              {matchSuccessMessage && (
                 <div 
                   style={{ 
-                    marginTop: '1rem', 
-                    padding: '0.85rem', 
+                    marginTop: '1rem',
                     backgroundColor: 'var(--primary-subtle)', 
-                    border: '1px solid var(--primary-border)',
-                    borderRadius: '10px',
+                    color: 'var(--primary)', 
+                    padding: '0.75rem 1rem', 
+                    borderRadius: '10px', 
                     fontSize: '0.85rem',
-                    color: 'var(--primary)',
+                    border: '1px solid var(--primary-border)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.5rem'
                   }}
                 >
-                  <Search size={16} className="pulse-animation" />
-                  <span>{matchSuccessMessage}</span>
+                  <CheckCircle2 size={16} />
+                  {matchSuccessMessage}
                 </div>
               )}
             </div>
-          ) : (
-            <div 
-              className="card" 
-              style={{ 
-                textAlign: 'center', 
-                padding: '3.5rem 1.5rem',
-                border: '1.5px dashed var(--border-light)',
-                backgroundColor: '#ffffff'
-              }}
-            >
-              <div 
-                style={{ 
-                  width: '56px', 
-                  height: '56px', 
-                  borderRadius: '16px', 
-                  backgroundColor: 'var(--bg-subtle)', 
-                  color: 'var(--text-dim)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  margin: '0 auto 1rem auto'
-                }}
-              >
-                <Car size={28} />
-              </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-main)' }}>
-                Chưa có chuyến đi nào được tạo
-              </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', maxWidth: '320px', margin: '0 auto' }}>
-                Vui lòng chọn lộ trình ở cột bên trái và bấm <strong>"Bắt đầu tạo chuyến đi"</strong> để xem bảng giá và tìm tài xế.
-              </p>
-            </div>
           )}
 
-          {/* Real-time State: Driver Accepted Event Card */}
+          {/* Real-time Driver Accepted Card */}
           {acceptedData && (
             <div 
               className="card" 
@@ -780,48 +1079,49 @@ export const RiderPage: React.FC = () => {
                 animation: 'slideUp 0.3s ease-out'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                 <div 
                   style={{ 
-                    width: '38px', 
-                    height: '38px', 
+                    width: '42px', 
+                    height: '42px', 
                     borderRadius: '50%', 
                     backgroundColor: 'var(--primary)', 
                     color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
+                    display: 'flex', 
+                    alignItems: 'center', 
                     justifyContent: 'center'
                   }}
                 >
-                  <CheckCircle2 size={22} />
+                  <Car size={22} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
-                    Tài xế đã nhận chuyến xe của bạn!
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary)' }}>
+                    TÀI XẾ ĐÃ NHẬN CHUYẾN!
                   </h3>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Sự kiện xác nhận qua WebSocket • Chuyến #{acceptedData.tripId.slice(0, 8)}
+                    Hệ thống thông báo thời gian thực qua WebSocket (SignalR)
                   </span>
                 </div>
               </div>
 
-              <div style={{ backgroundColor: '#ffffff', padding: '1rem', borderRadius: '10px', border: '1px solid var(--primary-border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Tài xế đón bạn</span>
-                    <strong style={{ fontSize: '1.05rem', color: 'var(--text-main)' }}>
-                      {acceptedData.driverName || 'Tài xế công nghệ'}
-                    </strong>
-                  </div>
-                  <span className="badge badge-success">
-                    Đang di chuyển đến điểm đón
-                  </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem' }}>
+                <div>
+                  <strong>Tài xế đón:</strong> {acceptedData.driverName || 'Tài xế đối tác SwiftRide'}
+                </div>
+                <div>
+                  <strong>Mã tài xế:</strong> <code>{acceptedData.driverId}</code>
+                </div>
+                <div>
+                  <strong>Trạng thái cuốc:</strong> <span className="badge badge-success">Đang di chuyển đến điểm đón</span>
+                </div>
+                <div>
+                  <strong>Thời gian nhận:</strong> {new Date(acceptedData.timestamp).toLocaleTimeString('vi-VN')}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Real-time State: Driver Rejected Event Card */}
+          {/* Real-time Driver Rejected Card */}
           {rejectedData && (
             <div 
               className="card" 
@@ -834,13 +1134,13 @@ export const RiderPage: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <div 
                   style={{ 
-                    width: '38px', 
-                    height: '38px', 
+                    width: '42px', 
+                    height: '42px', 
                     borderRadius: '50%', 
                     backgroundColor: 'var(--accent-rose)', 
                     color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
+                    display: 'flex', 
+                    alignItems: 'center', 
                     justifyContent: 'center'
                   }}
                 >
@@ -876,7 +1176,7 @@ export const RiderPage: React.FC = () => {
         onClose={() => setIsPriceModalOpen(false)}
         pricing={currentTrip?.pricing}
         estimatedFare={currentTrip?.estimatedFare}
-        distanceKm={currentTrip?.distanceKm}
+        distanceKm={currentTrip?.distanceKm || displayDistance}
       />
     </div>
   );

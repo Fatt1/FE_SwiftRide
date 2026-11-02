@@ -152,7 +152,7 @@ export const DEFAULT_RIDERS: User[] = [
   },
 ];
 
-// Fallback seed drivers
+// Fallback seed drivers with coordinates
 export const DEFAULT_DRIVERS: User[] = [
   {
     id: 'b2f9e955-8890-4169-b641-04b490695bb8',
@@ -181,6 +181,45 @@ export const DEFAULT_DRIVERS: User[] = [
     fullName: 'Lê Mạnh Cường (Tài xế)',
     email: 'manhcuong.le@swiftride.com',
     role: 'Driver',
+  },
+];
+
+export const DEFAULT_DRIVER_LOCATIONS: DriverLocation[] = [
+  {
+    id: 'loc-1',
+    driverId: 'b2f9e955-8890-4169-b641-04b490695bb8',
+    fullName: 'Đỗ Gia Phúc (Tài xế)',
+    latitude: 10.7750,
+    longitude: 106.6950,
+    isAvailable: true,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'loc-2',
+    driverId: '46fe866d-75ea-4cb9-9b5c-d9a4bb0a7c65',
+    fullName: 'Nguyễn Văn Hùng (Tài xế)',
+    latitude: 10.7850,
+    longitude: 106.6850,
+    isAvailable: true,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'loc-3',
+    driverId: '9d66494a-3e61-429e-aaaf-31d46a04ef59',
+    fullName: 'Trần Thanh Hải (Tài xế)',
+    latitude: 10.7620,
+    longitude: 106.6820,
+    isAvailable: true,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'loc-4',
+    driverId: '33f50b18-f7f1-4ffe-8808-dda07c21d0a9',
+    fullName: 'Lê Mạnh Cường (Tài xế)',
+    latitude: 10.8000,
+    longitude: 106.7150,
+    isAvailable: true,
+    updatedAt: new Date().toISOString(),
   },
 ];
 
@@ -225,6 +264,8 @@ export interface CreateTripRequest {
   hasToll: boolean;
   promoCode?: string;
   isRaining: boolean;
+  distanceKm?: number;
+  estimatedMinutes?: number;
 }
 
 export async function createTrip(payload: CreateTripRequest): Promise<TripCreatedResponse> {
@@ -317,19 +358,35 @@ export async function sendTestNotification(type: string): Promise<any> {
   return await res.json();
 }
 
-// 1. Lấy danh sách vị trí tất cả tài xế từ Matching Service
-export async function fetchDriverLocations(): Promise<DriverLocation[]> {
-  const res = await authFetch(`${API_CONFIG.MATCHING_URL}/api/v1/matching/drivers/locations`, {
+// 1. Lấy thông tin chi tiết một chuyến đi theo ID
+export async function fetchTripById(id: string): Promise<TripItem> {
+  const res = await authFetch(`${API_CONFIG.TRIP_URL}/api/v1/trips/${id}`, {
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Lấy danh sách vị trí tài xế thất bại (${res.status}): ${errorText}`);
+    throw new Error(`Lấy chi tiết chuyến đi thất bại (${res.status}): ${errorText}`);
   }
   return await res.json();
 }
 
-// 2. Lấy danh sách tất cả các phiên matching từ Matching Service
+// 2. Lấy danh sách vị trí tất cả tài xế từ Matching Service
+export async function fetchDriverLocations(): Promise<DriverLocation[]> {
+  try {
+    const res = await authFetch(`${API_CONFIG.MATCHING_URL}/api/v1/matching/drivers/locations`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    console.warn('Cannot fetch driver locations, using seed locations', err);
+  }
+  return DEFAULT_DRIVER_LOCATIONS;
+}
+
+// 3. Lấy danh sách tất cả các phiên matching từ Matching Service
 export async function fetchMatchSessions(): Promise<MatchSession[]> {
   const res = await authFetch(`${API_CONFIG.MATCHING_URL}/api/v1/matching/matchings`, {
     headers: { Accept: 'application/json' },
@@ -341,7 +398,7 @@ export async function fetchMatchSessions(): Promise<MatchSession[]> {
   return await res.json();
 }
 
-// 3. Lấy danh sách các chuyến đi từ Trip Service
+// 4. Lấy danh sách các chuyến đi từ Trip Service
 export async function fetchAllTrips(params?: { driverId?: string; riderId?: string; status?: string }): Promise<TripItem[]> {
   const query = new URLSearchParams();
   if (params?.driverId) query.append('driverId', params.driverId);
@@ -361,7 +418,7 @@ export async function fetchAllTrips(params?: { driverId?: string; riderId?: stri
   return await res.json();
 }
 
-// 4. Tài xế bấm đón khách (Pickup)
+// 5. Tài xế bấm đón khách (Pickup)
 export async function pickupTrip(tripId: string): Promise<any> {
   const res = await authFetch(`${API_CONFIG.TRIP_URL}/api/v1/trips/${tripId}/pickup`, {
     method: 'POST',
@@ -384,7 +441,7 @@ export async function pickupTrip(tripId: string): Promise<any> {
   return await res.json();
 }
 
-// 5. Tài xế trả khách (Dropoff) và kích hoạt thanh toán
+// 6. Tài xế trả khách (Dropoff) và kích hoạt thanh toán
 export async function dropoffTrip(tripId: string, payload: DropOffPayload): Promise<any> {
   const res = await authFetch(`${API_CONFIG.TRIP_URL}/api/v1/trips/${tripId}/dropoff`, {
     method: 'POST',
@@ -408,7 +465,7 @@ export async function dropoffTrip(tripId: string, payload: DropOffPayload): Prom
   return await res.json();
 }
 
-// 6. Lấy thông tin ví của người dùng theo UserId
+// 7. Lấy thông tin ví của người dùng theo UserId
 export async function fetchUserWallet(userId: string): Promise<Wallet> {
   const res = await authFetch(`${API_CONFIG.GATEWAY_URL}/api/v1/payments/wallets/user/${userId}`, {
     headers: { Accept: 'application/json' },
@@ -420,7 +477,7 @@ export async function fetchUserWallet(userId: string): Promise<Wallet> {
   return await res.json();
 }
 
-// 7. Lấy lịch sử biến động sổ cái (Ledger) của người dùng
+// 8. Lấy lịch sử biến động sổ cái (Ledger) của người dùng
 export async function fetchWalletLedger(userId: string): Promise<LedgerEntry[]> {
   const res = await authFetch(`${API_CONFIG.GATEWAY_URL}/api/v1/payments/wallets/user/${userId}/ledger`, {
     headers: { Accept: 'application/json' },
@@ -432,7 +489,7 @@ export async function fetchWalletLedger(userId: string): Promise<LedgerEntry[]> 
   return await res.json();
 }
 
-// 8. Nạp tiền vào ví người dùng (Top-Up)
+// 9. Nạp tiền vào ví người dùng (Top-Up)
 export async function topUpWallet(userId: string, amount: number): Promise<Wallet> {
   const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
@@ -467,6 +524,3 @@ export async function topUpWallet(userId: string, amount: number): Promise<Walle
 
   return await res.json();
 }
-
-
-

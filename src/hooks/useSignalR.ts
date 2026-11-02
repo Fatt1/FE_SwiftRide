@@ -134,6 +134,25 @@ export function useSignalR({
         ]);
       });
 
+      // Event: Generic ReceiveNotification from server
+      connection.on('ReceiveNotification', (notif: { type?: string; title?: string; message?: string; data?: any; timestamp?: string }) => {
+        console.log(`[SignalR - ${roleName}] ReceiveNotification:`, notif);
+        const logType = (notif.type === 'DriverFound' || notif.type === 'DriverRejected' || notif.type === 'TripAccepted')
+          ? notif.type
+          : 'System';
+        setLogs((prev) => [
+          {
+            id: Math.random().toString(),
+            type: logType,
+            title: notif.title || 'Thông báo hệ thống',
+            message: notif.message || '',
+            timestamp: notif.timestamp || new Date().toISOString(),
+            data: notif.data,
+          },
+          ...prev,
+        ]);
+      });
+
       // Connection lifecycle events
       connection.onreconnecting(() => {
         if (!isCancelled) setStatus('reconnecting');
