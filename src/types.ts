@@ -143,7 +143,7 @@ export interface TripItem {
   id: string;
   riderId: string;
   driverId?: string;
-  status: 'Requested' | 'DriverAccepted' | 'PickedUp' | 'DroppedOff' | 'Completed' | 'Cancelled' | string;
+  status: 'Requested' | 'DriverAccepted' | 'PickedUp' | 'DroppedOff' | 'Completed' | 'PaymentFailed' | 'Cancelled' | string;
   pickupAddress: string;
   dropoffAddress: string;
   pickupLat: number;
@@ -154,6 +154,8 @@ export interface TripItem {
   finalFare?: number;
   distanceKm?: number;
   createdAt: string;
+  paymentFailureReason?: string;
+  reason?: string;
 }
 
 export interface DropOffPayload {

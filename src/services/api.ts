@@ -524,3 +524,94 @@ export async function topUpWallet(userId: string, amount: number): Promise<Walle
 
   return await res.json();
 }
+
+export interface CreatePaymentRequest {
+  tripId: string;
+  riderId: string;
+  driverId: string;
+  amount: number;
+  paymentMethod: number; // 0: Wallet, 1: Card
+  gatewayToken?: string;
+  currency?: string;
+  idempotencyKey?: string;
+}
+
+// 10. Tạo giao dịch thanh toán cho chuyến đi (Payment Transaction)
+// Mỗi lần thanh toán lại (retry) đều là tạo một payment transaction mới hoàn toàn
+export async function createTripPayment(payload: CreatePaymentRequest): Promise<any> {
+  const idempotencyKey = payload.idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+      }));
+
+  const res = await authFetch(`${API_CONFIG.GATEWAY_URL}/api/v1/payments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      tripId: payload.tripId,
+      riderId: payload.riderId,
+      driverId: payload.driverId,
+      amount: payload.amount,
+      currency: payload.currency || 'VND',
+      paymentMethod: payload.paymentMethod,
+      gatewayToken: payload.gatewayToken || undefined,
+      idempotencyKey,
+    }),
+  });
+
+  if (!res.ok) {
+    let errorDetail = `Thanh toán thất bại (${res.status})`;
+    try {
+      const errJson = await res.json();
+      errorDetail = errJson.detail || errJson.title || errJson.message || errorDetail;
+    } catch {
+      const text = await res.text();
+      if (text) errorDetail = text;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+// 11. Thanh toán lại chuyến đi (Gọi tạo giao dịch thanh toán mới)
+export async function retryPaymentTrip(trip: TripItem, payload: { paymentMethod: number; gatewayToken?: string }): Promise<any> {
+  return await createTripPayment({
+    tripId: trip.id,
+    riderId: trip.riderId,
+    driverId: trip.driverId || trip.riderId,
+    amount: trip.finalFare || trip.estimatedFare || 0,
+    paymentMethod: payload.paymentMethod,
+    gatewayToken: payload.gatewayToken,
+  });
+}
+
+// 12. Hủy chuyến đi (Cancel Trip)
+export async function cancelTrip(tripId: string): Promise<any> {
+  const res = await authFetch(`${API_CONFIG.TRIP_URL}/api/v1/trips/${tripId}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    let errorDetail = `Hủy chuyến thất bại (${res.status})`;
+    try {
+      const errJson = await res.json();
+      errorDetail = errJson.detail || errJson.title || errorDetail;
+    } catch {
+      const text = await res.text();
+      if (text) errorDetail = text;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}

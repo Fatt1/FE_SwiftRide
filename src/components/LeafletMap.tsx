@@ -14,6 +14,8 @@ export interface LeafletMapProps {
   zoom?: number;
   center?: [number, number];
   interactive?: boolean;
+  style?: React.CSSProperties;
+  className?: string;
 }
 
 // Custom SVG Icons cho Leaflet divIcon với tọa độ anchor chuẩn xác 100%
@@ -169,6 +171,8 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
   zoom = 13,
   center = [10.7769, 106.7009], // Trung tâm Quận 1, TP.HCM
   interactive = true,
+  style,
+  className,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -481,6 +485,7 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
 
   return (
     <div
+      className={className}
       style={{
         position: 'relative',
         width: '100%',
@@ -489,6 +494,7 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
         overflow: 'hidden',
         border: '1px solid var(--border-light)',
         boxShadow: 'var(--shadow-md)',
+        ...style,
       }}
     >
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />

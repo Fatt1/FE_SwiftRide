@@ -79,9 +79,9 @@ body {
 }
 
 .header-inner {
-  max-width: 1200px;
+  max-width: 1500px;
   margin: 0 auto;
-  padding: 0.875rem 1.5rem;
+  padding: 0.875rem 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -511,4 +511,133 @@ body {
   color: var(--primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
+
+/* ==========================================================================
+   RIDE-HAILING FULL-SCREEN & OVERLAY PANEL STYLES (CLIENT / RIDER EXPERIENCE)
+   ========================================================================== */
+.rider-app-wrapper {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 65px);
+  overflow: hidden;
+  background-color: #f1f5f9;
+}
+
+.rider-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.rider-overlay-panel {
+  position: absolute;
+  top: 18px;
+  left: 24px;
+  z-index: 1000;
+  width: 480px;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 100px);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 20px 45px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rider-overlay-panel.minimized {
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.rider-panel-topbar {
+  padding: 0.75rem 1rem;
+  background-color: rgba(248, 250, 252, 0.9);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.rider-panel-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #e2e8f0;
+  padding: 3px;
+  border-radius: 12px;
+}
+
+.rider-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rider-nav-btn:hover {
+  color: var(--text-main);
+}
+
+.rider-nav-btn.active {
+  background-color: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.rider-panel-content {
+  padding: 1.25rem 1.4rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+/* Custom Sleek Scrollbar */
+.rider-panel-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rider-panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rider-panel-content::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.rider-panel-content::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .rider-overlay-panel {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 80px);
+    border-radius: 16px;
+  }
+}
+
 
