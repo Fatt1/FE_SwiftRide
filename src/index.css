@@ -328,10 +328,11 @@ body {
 }
 
 /* Modals */
-.modal-overlay {
+.modal-overlay,
+.modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 9999;
   background-color: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(4px);
   display: flex;
@@ -341,7 +342,8 @@ body {
   animation: fadeIn 0.2s ease-out;
 }
 
-.modal-dialog {
+.modal-dialog,
+.modal-content {
   background-color: #ffffff;
   border-radius: 20px;
   border: 1px solid var(--border-light);

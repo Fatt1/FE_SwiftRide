@@ -220,6 +220,9 @@ export const DriverPage: React.FC = () => {
       setTrips((prev) =>
         prev.map((t) => (t.id === tripId ? { ...t, status: 'PickedUp' } : t))
       );
+      if (selectedTripPreview?.id === tripId) {
+        setSelectedTripPreview((prev) => (prev ? { ...prev, status: 'PickedUp' } : null));
+      }
       loadTrips();
     } catch (err: any) {
       setActionStatus({
@@ -277,7 +280,14 @@ export const DriverPage: React.FC = () => {
         message: `Đã hoàn thành chuyến đi #${dropoffModalTrip.id.slice(0, 8)} và thực hiện quyết toán tiền cước!`,
       });
 
+      const finishedTripId = dropoffModalTrip.id;
       setDropoffModalTrip(null);
+      setTrips((prev) =>
+        prev.map((t) => (t.id === finishedTripId ? { ...t, status: 'DroppedOff' } : t))
+      );
+      if (selectedTripPreview?.id === finishedTripId) {
+        setSelectedTripPreview((prev) => (prev ? { ...prev, status: 'DroppedOff' } : null));
+      }
       loadTrips();
     } catch (err: any) {
       setDropoffError(err.message || 'Lỗi khi quyết toán chuyến đi.');
@@ -782,8 +792,60 @@ export const DriverPage: React.FC = () => {
                   {renderStatusBadge(selectedTripPreview.status)}
                 </div>
 
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {selectedTripPreview.distanceKm ? `Lộ trình ~${selectedTripPreview.distanceKm.toFixed(1)} km` : ''} • Giá cước: <strong>{formatVND(selectedTripPreview.finalFare || selectedTripPreview.estimatedFare)}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {selectedTripPreview.distanceKm ? `Lộ trình ~${selectedTripPreview.distanceKm.toFixed(1)} km` : ''} • Giá cước: <strong>{formatVND(selectedTripPreview.finalFare || selectedTripPreview.estimatedFare)}</strong>
+                  </div>
+
+                  {selectedTripPreview.status === 'PickedUp' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDropoffModal(selectedTripPreview);
+                      }}
+                      className="btn btn-primary"
+                      style={{ 
+                        padding: '0.4rem 0.95rem', 
+                        fontSize: '0.825rem',
+                        backgroundColor: '#9333ea',
+                        borderColor: '#9333ea'
+                      }}
+                    >
+                      <CreditCard size={14} />
+                      Trả khách & Quyết toán (Drop-off)
+                    </button>
+                  )}
+
+                  {selectedTripPreview.status === 'DriverAccepted' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePickup(selectedTripPreview.id);
+                      }}
+                      disabled={pickupProcessingId === selectedTripPreview.id}
+                      className="btn btn-primary"
+                      style={{ 
+                        padding: '0.4rem 0.95rem', 
+                        fontSize: '0.825rem',
+                        backgroundColor: '#2563eb',
+                        borderColor: '#2563eb'
+                      }}
+                    >
+                      {pickupProcessingId === selectedTripPreview.id ? (
+                        <>
+                          <RefreshCw size={14} className="pulse-animation" />
+                          Đang xử lý...
+                        </>
+                      ) : (
+                        <>
+                          <Car size={14} />
+                          Đã đón khách (Pickup)
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1070,8 +1132,12 @@ export const DriverPage: React.FC = () => {
 
       {/* Dropoff & Payment Modal */}
       {dropoffModalTrip && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '500px' }}>
+        <div className="modal-overlay" onClick={closeDropoffModal} style={{ zIndex: 9999 }}>
+          <div 
+            className="modal-dialog" 
+            style={{ maxWidth: '520px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'var(--primary-subtle)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
